@@ -1,0 +1,109 @@
+#!/bin/bash
+if [ $EUID != 0 ]; then
+    echo "Please run this script as root or with sudo."
+    exit 1
+fi
+if ! command -v wget > /dev/null 2>&1; then
+    echo "wget is not installed but is needed for the program to work."
+    exit 1
+fi
+KEEP=false
+YES=false
+while [ $# -ne 0 ]; do
+    case "$1" in
+        -h | --help)
+            echo -e "pwsh-update: Update/install PowerShell on Linux distros
+Usage:
+-h | --help
+    Print a help message and exit.
+
+-k | --keep
+    Keep the downloaded archive after installation.
+
+-y | --yes
+    Answer \"y\" for everything."
+            exit
+            ;;
+        -k | --keep)
+            KEEP=true
+            shift
+            ;;
+        -y | --yes)
+            YES=true
+            shift
+            ;;
+        *)
+            echo "\"$1\": invalid option. Run \"pwsh-update --help\" to see all options."
+            exit 1
+            ;;
+    esac
+    shift
+done
+LATEST=$(wget -qO- https://github.com/PowerShell/PowerShell/releases/latest | grep -oh "<title>.*</title>" | tr " " "\n" | grep "^v.*$" | tr -d "v")
+if [ "$LATEST" = "" ]; then
+    echo "Failed to get latest PowerShell version."
+    exit 1
+fi
+if command -v pwsh > /dev/null 2>&1; then
+    CURRENT=$(pwsh -v | tr -d "PowerShell ")
+    if [ "$LATEST" = "$CURRENT" ]; then
+        echo "PowerShell is already the newest version ($CURRENT)."
+        exit
+    else
+        echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
+    fi
+else
+    echo -n "PowerShell is not installed. Install? [y/n] "
+fi
+if [ $YES = "true" ]; then
+    CHOICE="Y"
+    echo "y"
+else
+    read CHOICE
+fi
+if [ "${CHOICE^^}" = "N" ]; then
+    echo "Abort."
+else
+    case $(arch) in
+        aarch64)
+            ARCH="arm64"
+            ;;
+        arm)
+            ARCH="arm32"
+            ;;
+        x86_64 | amd64)
+            ARCH="x64"
+            ;;
+        *)
+            echo "Architecture $(arch) not supported."
+            exit 1
+            ;;
+    esac
+    TARFILE=$(mktemp /tmp/powershell-XXXXXX.tar.gz)
+    echo "Downloading PowerShell ($LATEST)..."
+    if wget "https://github.com/PowerShell/PowerShell/releases/download/v$LATEST/powershell-$LATEST-linux-$ARCH.tar.gz" -O "$TARFILE" > /dev/null 2>&1; then
+        echo "Download done."
+    else
+        echo "Download failed."
+        exit 1
+    fi
+    echo "Extracting files..."
+    if rm -rf /usr/local/lib/powershell > /dev/null 2>&1; mkdir -p /usr/local/lib/powershell > /dev/null 2>&1; tar -zxf "$TARFILE" -C /usr/local/lib/powershell > /dev/null 2>&1; then
+        echo "Extraction done."
+    else
+        echo "Extraction failed."
+        exit 1
+    fi
+    echo "Linking executable to /usr/local/bin..."
+    if ln -sf /usr/local/lib/powershell/pwsh /usr/local/bin/pwsh > /dev/null 2>&1; then
+        echo "Linking done. Make sure that /usr/local/bin is in your \$PATH."
+    else
+        echo "Linking failed."
+        exit 1
+    fi
+    if [ $KEEP = "true" ]; then
+        echo "The archive is stored at \"$TARFILE\". Move it to another directory for later use."
+    else
+        rm "$TARFILE"
+    fi
+fi
