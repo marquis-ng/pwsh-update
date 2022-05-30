@@ -26,11 +26,9 @@ Usage:
             ;;
         -k | --keep)
             KEEP=true
-            shift
             ;;
         -y | --yes)
             YES=true
-            shift
             ;;
         *)
             echo "\"$1\": invalid option. Run \"pwsh-update --help\" to see all options."
@@ -104,6 +102,6 @@ else
     if [ $KEEP = "true" ]; then
         echo "The archive is stored at \"$TARFILE\". Move it to another directory for later use."
     else
-        rm "$TARFILE"
+        rm -f "$TARFILE"
     fi
 fi
