@@ -43,9 +43,8 @@ if [ "$LATEST" = "" ]; then
     exit 1
 fi
 if command -v pwsh > /dev/null 2>&1; then
-    CURRENT=$(pwsh -v | tr -d "PowerShell ")
-    if [ "$LATEST" = "$CURRENT" ]; then
-        echo "PowerShell is already the newest version ($CURRENT)."
+    if [ "$LATEST" = "$(pwsh -v | tr -d "PowerShell ")" ]; then
+        echo "PowerShell is already the newest version ($LATEST)."
         exit
     else
         echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
