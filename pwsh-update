@@ -37,6 +37,21 @@ Usage:
     esac
     shift
 done
+case $(arch) in
+    aarch64)
+        ARCH="arm64"
+        ;;
+    arm)
+        ARCH="arm32"
+        ;;
+    x86_64 | amd64)
+        ARCH="x64"
+        ;;
+    *)
+        echo "Architecture $(arch) not supported."
+        exit 1
+        ;;
+esac
 LATEST=$(wget -qO- https://github.com/PowerShell/PowerShell/releases/latest | grep -oh "<title>.*</title>" | tr " " "\n" | grep "^v.*$" | tr -d "v")
 if [ "$LATEST" = "" ]; then
     echo "Failed to get latest PowerShell version."
@@ -61,21 +76,6 @@ fi
 if [ "${CHOICE^^}" = "N" ]; then
     echo "Abort."
 else
-    case $(arch) in
-        aarch64)
-            ARCH="arm64"
-            ;;
-        arm)
-            ARCH="arm32"
-            ;;
-        x86_64 | amd64)
-            ARCH="x64"
-            ;;
-        *)
-            echo "Architecture $(arch) not supported."
-            exit 1
-            ;;
-    esac
     TARFILE=$(mktemp /tmp/powershell-XXXXXX.tar.gz)
     echo "Downloading PowerShell ($LATEST)..."
     if wget "https://github.com/PowerShell/PowerShell/releases/download/v$LATEST/powershell-$LATEST-linux-$ARCH.tar.gz" -O "$TARFILE" > /dev/null 2>&1; then
