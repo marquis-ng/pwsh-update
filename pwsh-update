@@ -1,14 +1,11 @@
 #!/bin/bash
-if [ $EUID != 0 ]; then
-    echo "Please run this script as root or with sudo."
-    exit 1
-fi
 if ! command -v wget > /dev/null 2>&1; then
     echo "wget is not installed but is needed for the program to work."
     exit 1
 fi
 KEEP=false
 YES=false
+GLOBAL=true
 while [ $# -ne 0 ]; do
     case "$1" in
         -h | --help)
@@ -21,7 +18,10 @@ Usage:
     Keep the downloaded archive after installation.
 
 -y | --yes
-    Answer \"y\" for everything."
+    Answer \"y\" for everything.
+
+-u | --user
+    Only install for user."
             exit
             ;;
         -k | --keep)
@@ -30,6 +30,9 @@ Usage:
         -y | --yes)
             YES=true
             ;;
+        -u | --user)
+            GLOBAL=false
+            ;;
         *)
             echo "\"$1\": invalid option. Run \"pwsh-update --help\" to see all options."
             exit 1
@@ -37,6 +40,10 @@ Usage:
     esac
     shift
 done
+if [ $EUID != 0 ] && [ $GLOBAL = "true" ]; then
+    echo "Please run this script as root or with sudo."
+    exit 1
+fi
 case $(arch) in
     aarch64)
         ARCH="arm64"
@@ -57,15 +64,28 @@ if [ "$LATEST" = "" ]; then
     echo "Failed to get latest PowerShell version."
     exit 1
 fi
-if command -v pwsh > /dev/null 2>&1; then
-    if [ "$LATEST" = "$(pwsh -v | tr -d "PowerShell ")" ]; then
-        echo "PowerShell is already the newest version ($LATEST)."
-        exit
+if [ $GLOBAL = "true" ]; then
+    if command -v pwsh > /dev/null 2>&1; then
+        if [ "$LATEST" = "$(pwsh -v | tr -d "PowerShell ")" ]; then
+            echo "PowerShell is already the newest version ($LATEST)."
+            exit
+        else
+            echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
+        fi
     else
-        echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
+        echo -n "PowerShell is not installed. Install? [y/n] "
     fi
 else
-    echo -n "PowerShell is not installed. Install? [y/n] "
+    if command -v ~/powershell/pwsh > /dev/null 2>&1; then
+        if [ "$LATEST" = "$(~/powershell/pwsh -v | tr -d "PowerShell ")" ]; then
+            echo "PowerShell is already the newest version ($LATEST)."
+            exit
+        else
+            echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
+        fi
+    else
+        echo -n "PowerShell is not installed. Install? [y/n] "
+    fi
 fi
 if [ $YES = "true" ]; then
     CHOICE="Y"
@@ -85,19 +105,29 @@ else
         exit 1
     fi
     echo "Extracting files..."
-    if rm -rf /usr/local/lib/powershell > /dev/null 2>&1; mkdir -p /usr/local/lib/powershell > /dev/null 2>&1; tar -zxf "$TARFILE" -C /usr/local/lib/powershell > /dev/null 2>&1; then
-        echo "Extraction done."
+    if [ $GLOBAL = "true" ]; then
+        if rm -rf /usr/local/lib/powershell > /dev/null 2>&1; mkdir -p /usr/local/lib/powershell > /dev/null 2>&1; tar -zxf "$TARFILE" -C /usr/local/lib/powershell > /dev/null 2>&1; then
+            echo "Extraction done."
+        else
+            echo "Extraction failed."
+            exit 1
+        fi    
+        echo "Linking executable to /usr/local/bin..."
+        if ln -sf /usr/local/lib/powershell/pwsh /usr/local/bin/pwsh > /dev/null 2>&1; then
+            echo "Linking done. Make sure that /usr/local/bin is in your \$PATH. Run \"pwsh\" to start PowerShell."
+        else
+            echo "Linking failed."
+            exit 1
+        fi
     else
-        echo "Extraction failed."
-        exit 1
+        if rm -rf ~/powershell > /dev/null 2>&1; mkdir -p ~/powershell > /dev/null 2>&1; tar -zxf "$TARFILE" -C ~/powershell > /dev/null 2>&1; then
+            echo "Extraction done. Run \"~/powershell/pwsh\" to start PowerShell."
+        else
+            echo "Extraction failed."
+            exit 1
+        fi
     fi
-    echo "Linking executable to /usr/local/bin..."
-    if ln -sf /usr/local/lib/powershell/pwsh /usr/local/bin/pwsh > /dev/null 2>&1; then
-        echo "Linking done. Make sure that /usr/local/bin is in your \$PATH."
-    else
-        echo "Linking failed."
-        exit 1
-    fi
+    
     if [ $KEEP = "true" ]; then
         echo "The archive is stored at \"$TARFILE\". Move it to another directory for later use."
     else
