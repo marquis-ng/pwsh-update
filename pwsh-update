@@ -6,6 +6,7 @@ fi
 KEEP=false
 YES=false
 GLOBAL=true
+CDIR="$HOME/powershell"
 while [ $# -ne 0 ]; do
     case "$1" in
         -h | --help)
@@ -21,7 +22,10 @@ Usage:
     Answer \"y\" for everything.
 
 -u | --user
-    Only install for user."
+    Only install for user.
+
+-d | --directory [dir]
+    Install in [dir]. Only obeys if the \"--user\" flag is set."
             exit
             ;;
         -k | --keep)
@@ -33,6 +37,24 @@ Usage:
         -u | --user)
             GLOBAL=false
             ;;
+        -d | --directory)
+            CDIR=true
+            if [ $# = 1 ]; then
+                echo "Missing argument: [dir]"
+                exit 1
+            fi
+            CDIR=$(realpath -- "$2")
+            case "$CDIR" in
+                "$HOME/"*)
+                    echo "Installing PowerShell under directory \"$CDIR\""
+                    ;;
+                *)
+                    echo "You must install PowerShell in your home directory. Please try again."
+                    exit 1
+                    ;;
+                esac
+                shift
+            ;;
         *)
             echo "\"$1\": invalid option. Run \"pwsh-update --help\" to see all options."
             exit 1
@@ -41,7 +63,7 @@ Usage:
     shift
 done
 if [ $EUID != 0 ] && [ $GLOBAL = "true" ]; then
-    echo "Please run this script as root or with sudo."
+    echo "Please run this script as with root privileges or with the \"--user\" flag."
     exit 1
 fi
 case $(arch) in
@@ -76,8 +98,8 @@ if [ $GLOBAL = "true" ]; then
         echo -n "PowerShell is not installed. Install? [y/n] "
     fi
 else
-    if command -v ~/powershell/pwsh > /dev/null 2>&1; then
-        if [ "$LATEST" = "$(~/powershell/pwsh -v | tr -d "PowerShell ")" ]; then
+    if command -v "$CDIR/pwsh" > /dev/null 2>&1; then
+        if [ "$LATEST" = "$("$CDIR/pwsh" -v | tr -d "PowerShell ")" ]; then
             echo "PowerShell is already the newest version ($LATEST)."
             exit
         else
@@ -120,8 +142,8 @@ else
             exit 1
         fi
     else
-        if rm -rf ~/powershell > /dev/null 2>&1; mkdir -p ~/powershell > /dev/null 2>&1; tar -zxf "$TARFILE" -C ~/powershell > /dev/null 2>&1; then
-            echo "Extraction done. Run \"~/powershell/pwsh\" to start PowerShell."
+        if rm -rf "$CDIR" > /dev/null 2>&1; mkdir -p "$CDIR" > /dev/null 2>&1; tar -zxf "$TARFILE" -C "$CDIR" > /dev/null 2>&1; then
+            echo "Extraction done. Run \"$CDIR/pwsh\" to start PowerShell."
         else
             echo "Extraction failed."
             exit 1
