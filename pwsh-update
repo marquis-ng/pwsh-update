@@ -6,7 +6,7 @@ fi
 KEEP=false
 YES=false
 GLOBAL=true
-CDIR="$HOME/powershell"
+DIR="/usr/local/lib"
 while [ $# -ne 0 ]; do
     case "$1" in
         -h | --help)
@@ -25,7 +25,7 @@ Usage:
     Only install for user.
 
 -d | --directory [dir]
-    Install in [dir]. Only obeys if the \"--user\" flag is set."
+    Install in [dir]. Must be used with the \"--user\" option."
             exit
             ;;
         -k | --keep)
@@ -36,24 +36,17 @@ Usage:
             ;;
         -u | --user)
             GLOBAL=false
+            if [ "$DIR" = "/usr/local/bin" ]; then
+                DIR="$HOME/powershell"
+            fi
             ;;
         -d | --directory)
-            CDIR=true
             if [ $# = 1 ]; then
                 echo "Missing argument: [dir]"
                 exit 1
             fi
-            CDIR=$(realpath -- "$2")
-            case "$CDIR" in
-                "$HOME/"*)
-                    echo "Installing PowerShell under directory \"$CDIR\""
-                    ;;
-                *)
-                    echo "You must install PowerShell in your home directory. Please try again."
-                    exit 1
-                    ;;
-                esac
-                shift
+            DIR=$(realpath -- "$2")
+            shift
             ;;
         *)
             echo "\"$1\": invalid option. Run \"pwsh-update --help\" to see all options."
@@ -63,10 +56,25 @@ Usage:
     shift
 done
 if [ $EUID != 0 ] && [ $GLOBAL = "true" ]; then
-    echo "Please run this script as with root privileges or with the \"--user\" flag."
+    echo "Please run this script with root privileges or the \"--user\" option."
     exit 1
 fi
-case $(arch) in
+if [ $GLOBAL = "true" ] && [ "$DIR" != "/usr/local/bin" ]; then
+    echo "You need to use the \"--user\" option with the \"--directory\" option."
+    exit 1
+fi
+if [ $GLOBAL = "false" ]; then
+    case "$DIR" in
+        "$HOME/"*)
+            ;;
+        *)
+            echo "You must install PowerShell in your home directory."
+            exit 1
+            ;;
+    esac
+fi
+echo "Installing PowerShell under directory \"$DIR\"."
+case "$(arch)" in
     aarch64)
         ARCH="arm64"
         ;;
@@ -77,7 +85,7 @@ case $(arch) in
         ARCH="x64"
         ;;
     *)
-        echo "Architecture $(arch) not supported."
+        echo "Architecture \"$(arch)\" not supported."
         exit 1
         ;;
 esac
@@ -86,34 +94,21 @@ if [ "$LATEST" = "" ]; then
     echo "Failed to get latest PowerShell version."
     exit 1
 fi
-if [ $GLOBAL = "true" ]; then
-    if command -v pwsh > /dev/null 2>&1; then
-        if [ "$LATEST" = "$(pwsh -v | tr -d "PowerShell ")" ]; then
-            echo "PowerShell is already the newest version ($LATEST)."
-            exit
-        else
-            echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
-        fi
+if command -v "$DIR/pwsh" > /dev/null 2>&1; then
+    if [ "$LATEST" = "$("$DIR/pwsh" -v | sed -e "s/PowerShell //g")" ]; then
+        echo "PowerShell is already the newest version ($LATEST)."
+        exit
     else
-        echo -n "PowerShell is not installed. Install? [y/n] "
+        echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
     fi
 else
-    if command -v "$CDIR/pwsh" > /dev/null 2>&1; then
-        if [ "$LATEST" = "$("$CDIR/pwsh" -v | tr -d "PowerShell ")" ]; then
-            echo "PowerShell is already the newest version ($LATEST)."
-            exit
-        else
-            echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
-        fi
-    else
-        echo -n "PowerShell is not installed. Install? [y/n] "
-    fi
+    echo -n "PowerShell is not installed. Install? [y/n] "
 fi
 if [ $YES = "true" ]; then
     CHOICE="Y"
     echo "y"
 else
-    read CHOICE
+    read -r CHOICE
 fi
 if [ "${CHOICE^^}" = "N" ]; then
     echo "Abort."
@@ -127,29 +122,23 @@ else
         exit 1
     fi
     echo "Extracting files..."
-    if [ $GLOBAL = "true" ]; then
-        if rm -rf /usr/local/lib/powershell > /dev/null 2>&1; mkdir -p /usr/local/lib/powershell > /dev/null 2>&1; tar -zxf "$TARFILE" -C /usr/local/lib/powershell > /dev/null 2>&1; then
+    if rm -rf "$DIR" > /dev/null 2>&1; mkdir -p "$DIR" > /dev/null 2>&1; tar -zxf "$TARFILE" -C "$DIR" > /dev/null 2>&1; then
+        if [ $GLOBAL = "true" ]; then
             echo "Extraction done."
+            echo "Linking executable to \"/usr/local/bin\"..."
+            if ln -sf /usr/local/lib/powershell/pwsh /usr/local/bin/pwsh > /dev/null 2>&1; then
+                echo "Linking done. Make sure that \"/usr/local/bin\" is in your \$PATH. Run \"pwsh\" to start PowerShell."
+            else
+                echo "Linking failed."
+                exit 1
+            fi
         else
-            echo "Extraction failed."
-            exit 1
-        fi    
-        echo "Linking executable to /usr/local/bin..."
-        if ln -sf /usr/local/lib/powershell/pwsh /usr/local/bin/pwsh > /dev/null 2>&1; then
-            echo "Linking done. Make sure that /usr/local/bin is in your \$PATH. Run \"pwsh\" to start PowerShell."
-        else
-            echo "Linking failed."
-            exit 1
+            echo "Extraction done. Run \"$DIR/pwsh\" to start PowerShell."
         fi
     else
-        if rm -rf "$CDIR" > /dev/null 2>&1; mkdir -p "$CDIR" > /dev/null 2>&1; tar -zxf "$TARFILE" -C "$CDIR" > /dev/null 2>&1; then
-            echo "Extraction done. Run \"$CDIR/pwsh\" to start PowerShell."
-        else
-            echo "Extraction failed."
-            exit 1
-        fi
+        echo "Extraction failed."
+        exit 1
     fi
-    
     if [ $KEEP = "true" ]; then
         echo "The archive is stored at \"$TARFILE\". Move it to another directory for later use."
     else
