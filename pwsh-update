@@ -36,7 +36,7 @@ Usage:
             ;;
         -u | --user)
             GLOBAL=false
-            if [ "$DIR" = "/usr/local/bin" ]; then
+            if [ "$DIR" = "/usr/local/lib" ]; then
                 DIR="$HOME/powershell"
             fi
             ;;
