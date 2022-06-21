@@ -59,7 +59,7 @@ if [ $EUID != 0 ] && [ $GLOBAL = "true" ]; then
     echo "Please run this script with root privileges or the \"--user\" option."
     exit 1
 fi
-if [ $GLOBAL = "true" ] && [ "$DIR" != "/usr/local/bin" ]; then
+if [ $GLOBAL = "true" ] && [ "$DIR" != "/usr/local/lib" ]; then
     echo "You need to use the \"--user\" option with the \"--directory\" option."
     exit 1
 fi
