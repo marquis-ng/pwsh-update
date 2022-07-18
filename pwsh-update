@@ -1,16 +1,31 @@
-#!/bin/bash
-if ! command -v wget > /dev/null 2>&1; then
-    echo "wget is not installed but is needed for the program to work."
+#!/bin/sh
+printfw() {
+    if [ "$1" = "-n" ]; then shift; printf "%b" "$*"; else printf "%b\n" "$*";fi
+}
+
+error() {
+    printfw "\033[1;31m$*\033[0m" 1>&2
     exit 1
-fi
+}
+
+depcheck() {
+    for cmd in "$@"; do
+        if ! command -v "$cmd" > /dev/null 2>&1; then
+            error "\"$cmd\" is not installed but is needed for the program to work."
+        fi
+    done
+}
+
+depcheck wget
 KEEP=false
 YES=false
 GLOBAL=true
 DIR="/usr/local/lib"
+
 while [ $# -ne 0 ]; do
     case "$1" in
         -h | --help)
-            echo -e "pwsh-update: Update/install PowerShell on Linux distros
+            printfw "$0: Update/install PowerShell on Linux distros
 Usage:
 -h | --help
     Print a help message and exit.
@@ -42,38 +57,35 @@ Usage:
             ;;
         -d | --directory)
             if [ $# = 1 ]; then
-                echo "Missing argument: [dir]"
-                exit 1
+                error "Missing argument: [dir]"
             fi
             DIR=$(realpath -- "$2")
             shift
             ;;
         *)
-            echo "\"$1\": invalid option. Run \"pwsh-update --help\" to see all options."
-            exit 1
+            error "\"$1\": invalid option. Run \"$0 --help\" to see all options."
             ;;
     esac
     shift
 done
-if [ $EUID != 0 ] && [ $GLOBAL = "true" ]; then
-    echo "Please run this script with root privileges or the \"--user\" option."
-    exit 1
+
+if [ "$(id -u)" != 0 ] && [ $GLOBAL = "true" ]; then
+    error "Please run this script with root privileges or the \"--user\" option."
 fi
 if [ $GLOBAL = "true" ] && [ "$DIR" != "/usr/local/lib" ]; then
-    echo "You need to use the \"--user\" option with the \"--directory\" option."
-    exit 1
+    error "You need to use the \"--user\" option with the \"--directory\" option."
 fi
 if [ $GLOBAL = "false" ]; then
     case "$DIR" in
         "$HOME/"*)
             ;;
         *)
-            echo "You must install PowerShell in your home directory."
-            exit 1
+            error "You must install PowerShell in your home directory."
             ;;
     esac
 fi
-echo "Installing PowerShell under directory \"$DIR\"."
+
+printfw "Installing PowerShell under directory \"$DIR\"."
 case "$(arch)" in
     aarch64)
         ARCH="arm64"
@@ -82,65 +94,62 @@ case "$(arch)" in
         ARCH="arm32"
         ;;
     x86_64 | amd64)
-        ARCH="x64"
+        ARCH="x64" 
         ;;
     *)
-        echo "Architecture \"$(arch)\" not supported."
-        exit 1
+        error "Architecture \"$(arch)\" not supported."
         ;;
 esac
+
 LATEST=$(wget -qO- https://github.com/PowerShell/PowerShell/releases/latest | grep -oh "<title>.*</title>" | tr " " "\n" | grep "^v.*$" | tr -d "v")
 if [ "$LATEST" = "" ]; then
-    echo "Failed to get latest PowerShell version."
-    exit 1
+    error "Failed to get latest PowerShell version."
 fi
 if command -v "$DIR/pwsh" > /dev/null 2>&1; then
     if [ "$LATEST" = "$("$DIR/pwsh" -v | sed -e "s/PowerShell //g")" ]; then
-        echo "PowerShell is already the newest version ($LATEST)."
+        printfw "PowerShell is already the newest version ($LATEST)."
         exit
     else
-        echo -n "PowerShell version ($LATEST) is released! Update? [y/n] "
+        printfw -n "PowerShell version ($LATEST) is released! Update? [y/n] "
     fi
 else
-    echo -n "PowerShell is not installed. Install? [y/n] "
+    printfw -n "PowerShell is not installed. Install? [y/n] "
 fi
 if [ $YES = "true" ]; then
     CHOICE="Y"
-    echo "y"
+    printfw "y"
 else
     read -r CHOICE
 fi
-if [ "${CHOICE^^}" = "N" ]; then
-    echo "Abort."
+
+if [ "$(printfw "$CHOICE" | tr "[:lower:]" "[:upper:]")" = "N" ]; then
+    printfw "Abort."
 else
     TARFILE=$(mktemp /tmp/powershell-XXXXXX.tar.gz)
-    echo "Downloading PowerShell ($LATEST)..."
+    printfw "Downloading PowerShell ($LATEST)..."
     if wget "https://github.com/PowerShell/PowerShell/releases/download/v$LATEST/powershell-$LATEST-linux-$ARCH.tar.gz" -O "$TARFILE" > /dev/null 2>&1; then
-        echo "Download done."
+        printfw "Download done."
     else
-        echo "Download failed."
-        exit 1
+        error "Download failed."
     fi
-    echo "Extracting files..."
+    printfw "Extracting files..."
     if rm -rf "$DIR" > /dev/null 2>&1; mkdir -p "$DIR" > /dev/null 2>&1; tar -zxf "$TARFILE" -C "$DIR" > /dev/null 2>&1; then
         if [ $GLOBAL = "true" ]; then
-            echo "Extraction done."
-            echo "Linking executable to \"/usr/local/bin\"..."
+            printfw "Extraction done."
+            printfw "Linking executable to \"/usr/local/bin\"..."
             if ln -sf /usr/local/lib/powershell/pwsh /usr/local/bin/pwsh > /dev/null 2>&1; then
-                echo "Linking done. Make sure that \"/usr/local/bin\" is in your \$PATH. Run \"pwsh\" to start PowerShell."
+                printfw "Linking done. Make sure that \"/usr/local/bin\" is in your \$PATH. Run \"pwsh\" to start PowerShell."
             else
-                echo "Linking failed."
-                exit 1
+                error "Linking failed."
             fi
         else
-            echo "Extraction done. Run \"$DIR/pwsh\" to start PowerShell."
+            printfw "Extraction done. Run \"$DIR/pwsh\" to start PowerShell."
         fi
     else
-        echo "Extraction failed."
-        exit 1
+        error "Extraction failed."
     fi
     if [ $KEEP = "true" ]; then
-        echo "The archive is stored at \"$TARFILE\". Move it to another directory for later use."
+        printfw "The archive is stored at \"$TARFILE\". Move it to another directory for later use."
     else
         rm -f "$TARFILE"
     fi
